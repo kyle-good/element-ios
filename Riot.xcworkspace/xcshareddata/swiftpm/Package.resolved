@@ -71,6 +71,15 @@
         "revision" : "f2616860a41f9d9932da412a8978fec79c06fe24",
         "version" : "0.1.4"
       }
+    },
+    {
+      "identity" : "wysiwyg-composer",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/aringenbach/wysiwyg-composer",
+      "state" : {
+        "revision" : "3d2aa32a9df908dbdc7ba53be8b3b98b2b35a268",
+        "version" : "0.0.7"
+      }
     }
   ],
   "version" : 2

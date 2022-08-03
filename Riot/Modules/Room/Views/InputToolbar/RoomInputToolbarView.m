@@ -21,6 +21,8 @@
 #import "GeneratedInterface-Swift.h"
 #import "GBDeviceInfo_iOS.h"
 
+@import WysiwygComposer;
+
 static const CGFloat kContextBarHeight = 24;
 static const CGFloat kActionMenuAttachButtonSpringVelocity = 7;
 static const CGFloat kActionMenuAttachButtonSpringDamping = .45;
@@ -30,7 +32,7 @@ static const NSTimeInterval kActionMenuAttachButtonAnimationDuration = .4;
 static const NSTimeInterval kActionMenuContentAlphaAnimationDuration = .2;
 static const NSTimeInterval kActionMenuComposerHeightAnimationDuration = .3;
 
-@interface RoomInputToolbarView() <UITextViewDelegate, RoomInputToolbarTextViewDelegate>
+@interface RoomInputToolbarView() <UITextViewDelegate, RoomInputToolbarTextViewDelegate, WysiwygHostingViewDelegate>
 
 @property (nonatomic, weak) IBOutlet UIView *mainToolbarView;
 
@@ -44,6 +46,7 @@ static const NSTimeInterval kActionMenuComposerHeightAnimationDuration = .3;
 @property (nonatomic, weak) IBOutlet UIButton *inputContextButton;
 
 @property (nonatomic, weak) IBOutlet RoomActionsBar *actionsBar;
+@property (nonatomic, weak) IBOutlet WysiwygHostingView *wysiwygHostingView;
 
 @property (nonatomic, weak) IBOutlet NSLayoutConstraint *mainToolbarMinHeightConstraint;
 @property (nonatomic, weak) IBOutlet NSLayoutConstraint *mainToolbarHeightConstraint;
@@ -77,13 +80,15 @@ static const NSTimeInterval kActionMenuComposerHeightAnimationDuration = .3;
 
     self.isEncryptionEnabled = _isEncryptionEnabled;
     
-    [self updateUIWithAttributedTextMessage:nil animated:NO];
+    [self updateUIWithIsEmptyText:true animated:NO];
     
     self.textView.toolbarDelegate = self;
     
     // Add an accessory view to the text view in order to retrieve keyboard view.
     inputAccessoryView = [[UIView alloc] initWithFrame:CGRectZero];
     self.textView.inputAccessoryView = inputAccessoryView;
+
+    self.wysiwygHostingView.delegate = self;
 }
 
 - (void)setVoiceMessageToolbarView:(UIView *)voiceMessageToolbarView
@@ -171,21 +176,26 @@ static const NSTimeInterval kActionMenuComposerHeightAnimationDuration = .3;
                                              NSFontAttributeName: self.textDefaultFont }
                                     range:NSMakeRange(0, mutableTextMessage.length)];
         attributedTextMessage = mutableTextMessage;
+    } else {
+        // WysiwygComposer only supports clearing for now
+        [self.wysiwygHostingView clearContent];
     }
 
     self.textView.attributedText = attributedTextMessage;
-    [self updateUIWithAttributedTextMessage:attributedTextMessage animated:YES];
+    [self updateUIWithIsEmptyText:!attributedTextMessage.length animated:YES];
     [self textViewDidChange:self.textView];
 }
 
 - (NSAttributedString *)attributedTextMessage
 {
-    return self.textView.attributedText;
+    return [[NSAttributedString alloc] initWithString:self.wysiwygHostingView.content.plainText];
+    //return self.textView.attributedText;
 }
 
 - (NSString *)textMessage
 {
-    return self.textView.text;
+    return self.wysiwygHostingView.content.plainText;
+    //return self.textView.text;
 }
 
 - (UIFont *)textDefaultFont
@@ -365,7 +375,7 @@ static const NSTimeInterval kActionMenuComposerHeightAnimationDuration = .3;
 {
     NSMutableAttributedString *newText = [[NSMutableAttributedString alloc] initWithAttributedString:textView.attributedText];
     [newText replaceCharactersInRange:range withString:text];
-    [self updateUIWithAttributedTextMessage:newText animated:YES];
+    [self updateUIWithIsEmptyText:!newText.length animated:YES];
 
     return YES;
 }
@@ -390,27 +400,7 @@ static const NSTimeInterval kActionMenuComposerHeightAnimationDuration = .3;
 
 - (void)textView:(RoomInputToolbarTextView *)textView didChangeHeight:(CGFloat)height
 {
-    // Update height of the main toolbar (message composer)
-    CGFloat updatedHeight = height + (self.messageComposerContainerTopConstraint.constant + self.messageComposerContainerBottomConstraint.constant) + self.inputContextViewHeightConstraint.constant;
-
-    if (self.maxHeight && updatedHeight > self.maxHeight)
-    {
-        textView.maxHeight -= updatedHeight - self.maxHeight;
-        updatedHeight = self.maxHeight;
-    }
-
-    if (updatedHeight < self.mainToolbarMinHeightConstraint.constant)
-    {
-        updatedHeight = self.mainToolbarMinHeightConstraint.constant;
-    }
-
-    self.mainToolbarHeightConstraint.constant = updatedHeight;
-
-    // Update toolbar superview
-    if ([self.delegate respondsToSelector:@selector(roomInputToolbarView:heightDidChanged:completion:)])
-    {
-        [self.delegate roomInputToolbarView:self heightDidChanged:updatedHeight completion:nil];
-    }
+    //[self updateTextViewHeight:height];
 }
 
 - (void)textView:(RoomInputToolbarTextView *)textView didReceivePasteForMediaFromSender:(id)sender
@@ -432,12 +422,14 @@ static const NSTimeInterval kActionMenuComposerHeightAnimationDuration = .3;
 
 - (BOOL)isFirstResponder
 {
-    return [self.textView isFirstResponder];
+    return self.wysiwygHostingView.isFirstResponder;
+    //return [self.textView isFirstResponder];
 }
 
 - (BOOL)becomeFirstResponder
 {
-    return [self.textView becomeFirstResponder];
+    return self.wysiwygHostingView.becomeFirstResponder;
+    //return [self.textView becomeFirstResponder];
 }
 
 - (void)dismissKeyboard
@@ -506,16 +498,51 @@ static const NSTimeInterval kActionMenuComposerHeightAnimationDuration = .3;
 
 #pragma mark - Private
 
-- (void)updateUIWithAttributedTextMessage:(NSAttributedString *)attributedTextMessage animated:(BOOL)animated
+- (void)updateUIWithIsEmptyText:(BOOL)isEmptyText animated:(BOOL)animated
 {
     self.actionMenuOpened = NO;
         
     [UIView animateWithDuration:(animated ? 0.15f : 0.0f) animations:^{
-        self.rightInputToolbarButton.alpha = attributedTextMessage.length ? 1.0f : 0.0f;
-        self.rightInputToolbarButton.enabled = attributedTextMessage.length;
+        self.rightInputToolbarButton.alpha = isEmptyText ? 0.0f : 1.0f;
+        self.rightInputToolbarButton.enabled = !isEmptyText;
         
-        self.voiceMessageToolbarView.alpha = attributedTextMessage.length ? 0.0f : 1.0;
+        self.voiceMessageToolbarView.alpha = isEmptyText ? 1.0f : 0.0f;
     }];
+}
+
+- (void)updateTextViewHeight:(CGFloat)height
+{
+    // Update height of the main toolbar (message composer)
+    CGFloat updatedHeight = height + (self.messageComposerContainerTopConstraint.constant + self.messageComposerContainerBottomConstraint.constant) + self.inputContextViewHeightConstraint.constant;
+
+    if (self.maxHeight && updatedHeight > self.maxHeight)
+    {
+        self.textView.maxHeight -= updatedHeight - self.maxHeight;
+        updatedHeight = self.maxHeight;
+    }
+
+    if (updatedHeight < self.mainToolbarMinHeightConstraint.constant)
+    {
+        updatedHeight = self.mainToolbarMinHeightConstraint.constant;
+    }
+
+    self.mainToolbarHeightConstraint.constant = updatedHeight;
+
+    // Update toolbar superview
+    if ([self.delegate respondsToSelector:@selector(roomInputToolbarView:heightDidChanged:completion:)])
+    {
+        [self.delegate roomInputToolbarView:self heightDidChanged:updatedHeight completion:nil];
+    }
+}
+
+#pragma mark - WysiwygHostingViewDelegate
+
+- (void)idealHeightDidChange:(CGFloat)height {
+    [self updateTextViewHeight:height + 30.f];
+}
+
+- (void)isContentEmptyDidChange:(BOOL)isEmpty {
+    [self updateUIWithIsEmptyText:isEmpty animated:true];
 }
 
 @end
