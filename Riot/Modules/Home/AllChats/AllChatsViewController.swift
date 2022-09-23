@@ -496,8 +496,12 @@ class AllChatsViewController: HomeViewController {
     private func updateToolbar(with menu: UIMenu) {
         self.navigationController?.isToolbarHidden = false
         self.update(with: ThemeService.shared().theme)
+        
+        let spacesButton = UIBarButtonItem(image: Asset.Images.allChatsSpacesIcon.image, style: .done, target: self, action: #selector(self.showSpaceSelectorAction(sender: )))
+        spacesButton.accessibilityLabel = VectorL10n.spaceSelectorTitle
+        
         self.setToolbarItems([
-            UIBarButtonItem(image: Asset.Images.allChatsSpacesIcon.image, style: .done, target: self, action: #selector(self.showSpaceSelectorAction(sender: ))),
+            spacesButton,
             UIBarButtonItem.flexibleSpace(),
             UIBarButtonItem(image: Asset.Images.allChatsEditIcon.image, menu: menu)
         ], animated: true)
